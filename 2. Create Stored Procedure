@@ -1,0 +1,135 @@
+CREATE PROCEDURE [dbo].[spCaptureDatabaseFileSize] AS
+CREATE TABLE #Databases (ID INT IDENTITY (1,1),  DatabaseName VARCHAR(100))
+
+INSERT INTO #Databases (DatabaseName)
+SELECT NAME 
+FROM sys.databases
+WHERE state = 0; 
+
+ 
+
+DECLARE @StartRecord INT = (SELECT MIN(ID) FROM #Databases)
+DECLARE @StopRecord INT = (SELECT MAX(ID) FROM #Databases)
+DECLARE @CurrentRecord INT = @StartRecord
+DECLARE @currentDatabaseName VARCHAR(100)
+DECLARE @SQL VARCHAR(MAX)
+DECLARE @SQLResult TABLE ([database_name] VARCHAR(104), [Physical_name] VARCHAR (150), filesize BIGINT)
+
+ 
+
+WHILE @CurrentRecord <=  @StopRecord
+              BEGIN
+      
+              SELECT
+              @CurrentDatabaseName = DatabaseName
+              FROM #Databases
+              WHERE id = @CurrentRecord
+
+              SET @SQL = 'SELECT [name], physical_name, size FROM ' + @CurrentDatabaseName  + '.sys.database_files ORDER BY [type], [file_id] '
+
+              INSERT @SQLResult ([database_name], [Physical_name] , [filesize])
+
+              EXEC (@SQL)
+
+              SET @CurrentRecord = @CurrentRecord + 1
+              END
+
+INSERT INTO [dbo].[TblDbFileSize] (CreatedDate, databasename, FileType, FileSizeMb)
+
+                                  select
+                                  getdate(),
+                                  Database_Name,
+                                  Right(physical_name,3),
+                                  round(filesize /128,0) DatabaseSize
+                                  from @SQLResult
+
+DROP TABLE #Databases
+
+create PROCEDURE [dbo].[spCaptureDatabaseTableSize]
+       @Database VARCHAR(100) = '0',     --Which database should be analysed, when set to ALL will run against all DBs (including system databases).
+       @SizeThreshold VARCHAR(4) = 150,  --What threshold of table MB should be recorded, 0 will return all tables regardless of size.
+
+    @Debug TINYINT = 0                --Mode "1" displays more debug detail behind calculations.
+AS
+
+DECLARE @ProcProgress VARCHAR(250)
+CREATE TABLE #Databases (ID INT IDENTITY (1,1),  DatabaseName VARCHAR(100))
+
+       INSERT INTO #Databases (DatabaseName)
+       SELECT name 
+       FROM sys.databases
+       WHERE (@Database = name or @Database = 0) AND state = 0
+
+       IF @Debug = 1
+       BEGIN 
+       SET @ProcProgress = ('Identifying databases to analyse, ' + CAST((SELECT COUNT(*) FROM #Databases) AS VARCHAR) + ' databases identfied using parameters supplied.')
+       RAISERROR (@ProcProgress, 0, 1) WITH NOWAIT    
+       END
+
+DECLARE @StartRecord INT = (SELECT MIN(ID) FROM #Databases)
+DECLARE @StopRecord INT = (SELECT MAX(ID) FROM #Databases)
+DECLARE @CurrentRecord INT = @StartRecord
+DECLARE @currentDatabaseName VARCHAR(100)
+DECLARE @SQL VARCHAR(MAX)
+DECLARE @SQLResult TABLE ([database_name] VARCHAR(100), [Physical_name] VARCHAR (150), filesize BIGINT)
+
+WHILE @CurrentRecord <=  @StopRecord
+
+              BEGIN
+              SELECT
+              @CurrentDatabaseName = DatabaseName
+              FROM #Databases
+              WHERE id = @CurrentRecord
+
+              IF @Debug = 1
+              BEGIN 
+              SET @ProcProgress = ('Looping through databases, analysing database ' + @CurrentDatabaseName +'')
+              RAISERROR (@ProcProgress, 0, 1) WITH NOWAIT
+              END
+
+              SET @SQL = '  SELECT
+
+                                         getdate() datetime, '''
+                                         + @CurrentDatabaseName + ''' as DB,
+                                         t.NAME AS TBL,
+                                         p.rows NumberRows,
+                                         COUNT(distinct I.index_id) NumberIndexes,
+                                         CAST(ROUND(((SUM(a.total_pages) * 8) / 1024.00), 2) AS NUMERIC(36, 2)) AS SizeMB
+                                         FROM ' + @CurrentDatabaseName +'.sys.tables t
+
+                                         INNER JOIN ' + @CurrentDatabaseName +'.sys.indexes i
+                                         ON t.OBJECT_ID = i.object_id
+
+                                         INNER JOIN ' + @CurrentDatabaseName +'.sys.partitions p
+                                         ON i.object_id = p.OBJECT_ID AND i.index_id = p.index_id
+
+                                         INNER JOIN ' + @CurrentDatabaseName +'.sys.allocation_units a
+                                         ON p.partition_id = a.container_id
+
+                                         LEFT OUTER JOIN ' + @CurrentDatabaseName + '.sys.schemas s
+                                         ON t.schema_id = s.schema_id
+
+                                         WHERE
+                                         i.OBJECT_ID > 255
+                                         GROUP BY t.Name, s.Name, p.Rows
+
+                                         HAVING CAST(ROUND(((SUM(a.total_pages) * 8) / 1024.00), 2) AS NUMERIC(36, 2))  >= '
+
+                                         + @SizeThreshold + '
+
+                                         ORDER BY SizeMB DESC, t.Name'
+
+ 
+
+              IF @Debug = 1
+              BEGIN 
+              SET @ProcProgress = ('Preparing to execute SQL ' + @SQL+'')
+              RAISERROR (@ProcProgress, 0, 1) WITH NOWAIT    
+              END
+
+              INSERT INTO [DatabaseMonitor].[dbo].[TblDbTableFileSize] (DATETIME, DB, TBL, NumberRows, NumberIndexes, SizeMB)
+              EXEC (@SQL)  
+              SET @CurrentRecord = @CurrentRecord + 1
+              END
+
+DROP TABLE #Databases
