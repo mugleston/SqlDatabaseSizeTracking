@@ -9,12 +9,11 @@ CREATE TABLE [dbo].[TblDbFileSize](
 ) ON [PRIMARY]
 
 CREATE TABLE [dbo].[TblDbTableFileSize](
-
-       [ID] [int] IDENTITY(1,1) NOT NULL,
-       [Datetime] [datetime] NOT NULL,
-       [DB] [varchar](104) NULL,
-       [TBL] [varchar](150) NULL,
-       [NumberRows] [int] NOT NULL,
-       [SizeMB] [numeric](36, 2) NOT NULL,
-       [NumberIndexes] [int] NULL
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[CreatedDate] [date] NOT NULL,
+	[DatabaseName] [varchar](104) NULL,
+	[Tablename] [varchar](150) NULL,
+	[NumberRows] [int] NOT NULL,
+	[FileSizeMB] [numeric](36, 2) NOT NULL,
+	[NumberIndexes] [int] NULL
 ) ON [PRIMARY]
