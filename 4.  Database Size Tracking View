@@ -1,0 +1,23 @@
+Create View VW_DbFileSize AS
+
+
+
+SELECT 
+
+
+
+DBTFS.*,
+
+DBTFS.FileSizeMB / 100 FileSizeGB,
+
+Case
+
+WHEN RANK() OVER(PARTITION BY DBTFS.DatabaseName Order by DBTFS.CreatedDate Desc) = 1 THEN 1
+
+ELSE 0
+
+END IsLatestDatabaseReading
+
+
+
+FROM [DatabaseMonitor].[dbo].[TblDbFileSize] DBTFS
