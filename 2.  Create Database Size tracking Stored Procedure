@@ -1,3 +1,4 @@
+USE [DatabaseMonitor]
 CREATE PROCEDURE [dbo].[spCaptureDatabaseFileSize] AS
  
 
