@@ -1,0 +1,70 @@
+CREATE PROCEDURE [dbo].[spCaptureDatabaseFileSize] AS
+ 
+
+CREATE TABLE #Databases (ID INT IDENTITY (1,1),  DatabaseName VARCHAR(100))
+
+INSERT INTO #Databases (DatabaseName)
+
+SELECT NAME 
+
+FROM sys.databases
+
+WHERE state = 0; 
+
+ 
+DECLARE @StartRecord INT = (SELECT MIN(ID) FROM #Databases)
+
+DECLARE @StopRecord INT = (SELECT MAX(ID) FROM #Databases)
+
+DECLARE @CurrentRecord INT = @StartRecord
+
+DECLARE @currentDatabaseName VARCHAR(100)
+
+DECLARE @SQL VARCHAR(MAX)
+
+DECLARE @SQLResult TABLE ([database_name] VARCHAR(104), [Physical_name] VARCHAR (150), filesize BIGINT)
+
+
+WHILE @CurrentRecord <=  @StopRecord
+
+              BEGIN
+
+             
+
+              SELECT
+
+              @CurrentDatabaseName = DatabaseName
+
+              FROM #Databases
+
+              WHERE id = @CurrentRecord
+
+
+              SET @SQL = 'SELECT [name], physical_name, size FROM ' + @CurrentDatabaseName  + '.sys.database_files ORDER BY [type], [file_id] '
+
+              INSERT @SQLResult ([database_name], [Physical_name] , [filesize])
+
+              EXEC (@SQL)
+ 
+
+              SET @CurrentRecord = @CurrentRecord + 1
+
+              END
+
+ 
+
+INSERT INTO [dbo].[TblDbFileSize] (CreatedDate, databasename, FileType, FileSizeMb)
+
+                                  select
+
+                                  getdate(),
+
+                                  Database_Name,
+
+                                  Right(physical_name,3),
+
+                                  round(filesize /128,0) DatabaseSize
+
+                                  from @SQLResult
+
+DROP TABLE #Databases
